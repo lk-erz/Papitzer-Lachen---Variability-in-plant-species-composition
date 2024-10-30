@@ -1,13 +1,14 @@
 #==============================================================================
-# Supplementary vegetation analysis for bachelor's thesis
+# Supplementary vegetation analysis
 # Institution: University of Leipzig
-# Title: Variability in plant species composition in the floodplain meadows 'Papitzer Lachen'
-# Author: Lukas Erzfeld
+# Title: Variability in plant species composition of a temperate floodplain meadow in response to fine-scale topography
+# Authors: Lukas Erzfeld, Hannes Feilhauer
 # Date: 26.01.2023
 #===============================================================================
 
 # required packages may have to be installed primarily
-# install.packages(c("ggplot2", "ggpubr", "gridExtra", "readxl", "tidyverse", "vegan", "VennDiagram))
+# install.packages(c("corrplot", "ggplot2", "ggpubr", "gridExtra", "readxl", "tidyverse", "vegan", "VennDiagram))
+library(corrplot)
 library(ggplot2)
 library(ggpubr)
 library(gridExtra)
@@ -57,18 +58,32 @@ ellenberg <- read.table("data/PL_veg_ellenberg.txt", header = TRUE, sep = "\t", 
 rownames(ellenberg) <- ellenberg[, 1]
 ellenberg <- ellenberg[, -1]
 
-ellenberg_mean <- function(deckung, eb){
+
+ellenberg_mean <- function(deckung, eb, weighted=T){
+  if (!weighted){
+    deckung[deckung > 1] <- 1 # weight all species equally
+  }
   eb_non_na <- is.na(eb) == F
   deckung_tot <- sum(deckung[eb_non_na])
   sum(eb * deckung, na.rm = T) / deckung_tot
 }
+
 
 eb_plot <- matrix(0, 20, 5)
 rownames(eb_plot) <- rownames(dat)
 colnames(eb_plot) <- colnames(ellenberg)
 for(i in 1:20){
   for(j in 1:5){
-    eb_plot[i, j] <- ellenberg_mean(dat[i, ], ellenberg[, j])
+    eb_plot[i, j] <- ellenberg_mean(dat[i, ], ellenberg[, j], weighted=T)
+  }
+}
+
+eb_mean_unweighted <- matrix(0, 20, 5)
+rownames(eb_mean_unweighted) <- rownames(dat)
+colnames(eb_mean_unweighted) <- colnames(ellenberg)
+for(i in 1:20){
+  for(j in 1:5){
+    eb_mean_unweighted[i, j] <- ellenberg_mean(dat[i, ], ellenberg[, j], weighted=F)
   }
 }
 
@@ -144,6 +159,8 @@ venn.plot <- draw.triple.venn(area.vector = c((sv - sv_ae - sv_ss - sv_ae_ss),
                                            "Arrhenatheretum elatioris"), 
                               fill = c("orange", "#00a52a", "#9a12b2"),
                               lty = "blank", cex = 2, cat.cex = 2,
+                              fontfamily = "sans", cat.fontfamily = "sans",
+                              cat.fontface = "italic", cat.pos = c(325, 35, 180),
                               cat.col = c("orange", "#00a52a", "#9a12b2"), 
                               direct.area = T)
 dev.off()
@@ -261,6 +278,7 @@ ggsave(filename = "Papitzer_Lachen_dca_env_var.png",
        plot = last_plot(),
        device = "png",
        path = "data/plots")
+
 #-------------------------------------------------------------------------------
 
 # correlations between DCA1 axis and env-variables
@@ -358,6 +376,17 @@ scatter + font("xylab", size = 12)
 
 
 # correlations between env-variables
+env_mat <- dca_sc_scatter[, 5:8]
+env_mat <- cbind(env_mat, eb_plot)
+cor_mat <- cor(env_mat)
+png(filename="data/plots/Papitzer_Lachen_env_var_corrplot.png",
+    width=3.25, height=3.25,
+    units="in",
+    res=600,
+    pointsize=4)
+corrplot(cor_mat, method = "color", type = "upper", order = "original", tl.col = "black", diag = F)
+dev.off()
+
 # elevation vs. groundwater surface distance
 scatter <- ggscatter(dca_sc_scatter, x = "gw_mean", y = "elev", size = 1,
                      add = "reg.line", conf.int = TRUE, 
@@ -420,3 +449,62 @@ scatter <- ggscatter(dca_sc_scatter, x = "lc", y = "gw_mean",
                      add.params = list(color = "black", fill = "lightgray"),
                      cor.coef.size = 5)
 scatter + font("xylab", size = 12)
+
+#-------------------------------------------------------------------------------
+
+# correlations between F-values and env-variables
+dca_sc_scatter$eb_F <- eb_plot[, 1]
+
+
+# F vs. elevation
+scatter <- ggscatter(dca_sc_scatter, x = "elev", y = "eb_F", size = 1,
+                     add = "reg.line", conf.int = TRUE, 
+                     cor.coef = TRUE, cor.method = "pearson",
+                     xlab = "ground elevation [m]", ylab = "Ellenberg F",
+                     add.params = list(color = "black", fill = "lightgray"),
+                     cor.coef.size = 2)
+plot1 <- scatter + theme(text = element_text(size = 6))  + ylim(4, 9)
+
+# F vs. clay
+scatter <- ggscatter(dca_sc_scatter, x = "clay_mean", y = "eb_F", size = 1,
+                     add = "reg.line", conf.int = TRUE, 
+                     cor.coef = TRUE, cor.method = "pearson",
+                     xlab = "thickness of alluvial clay layer [m]", ylab = "Ellenberg F",
+                     add.params = list(color = "black", fill = "lightgray"),
+                     cor.coef.size = 2)
+plot2 <- scatter + theme(text = element_text(size = 6)) + ylim(4, 9)
+
+# F vs. least cost path
+scatter <- ggscatter(dca_sc_scatter, x = "lc", y = "eb_F", size = 1,
+                     add = "reg.line", conf.int = TRUE, 
+                     cor.coef = TRUE, cor.method = "pearson",
+                     xlab = "least cost to next water body", ylab = "Ellenberg F",
+                     add.params = list(color = "black", fill = "lightgray"),
+                     cor.coef.size = 2)
+plot3 <- scatter + theme(text = element_text(size = 6)) + ylim(4, 9)
+
+# F vs. ground water-surface dist.
+scatter <- ggscatter(dca_sc_scatter, x = "gw_mean", y = "eb_F", size = 1,
+                     add = "reg.line", conf.int = TRUE, 
+                     cor.coef = TRUE, cor.method = "pearson",
+                     xlab = "distance to groundwater table [m]", ylab = "Ellenberg F",
+                     add.params = list(color = "black", fill = "lightgray"),
+                     cor.coef.size = 2)
+plot4 <- scatter + theme(text = element_text(size = 6)) + ylim(4, 9)
+
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2, nrow=2)
+
+# save file
+g <- arrangeGrob(plot1, plot2, plot3, plot4, nrow=2, ncol=2)
+ggsave(g,
+       file = "env_var_vs_EB_F.png",
+       path = "data/plots")
+
+
+#-------------------------------------------------------------------------------
+# permutation-based p-values
+pvalues_env <- envfit(dca_sc, dca_sc_scatter[,5:ncol(dca_sc_scatter)])
+pvalues_env$vectors
+
+pvalues_ellenberg <- envfit(dca_sc, eb_plot)
+pvalues_ellenberg$vectors
